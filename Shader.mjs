@@ -35,7 +35,7 @@ const insertMain = shader => {
 
 // Returns whether a given uniform is already declared in the shader
 const hasUniformDeclaration = (shader, uniformName) => {
-    const uniformTypes = ['float', 'vec2', 'vec3', 'vec4', 'sampler2D']
+    const uniformTypes = ['float', 'vec2', 'vec3', 'vec4', 'sampler2D', 'bool', 'int']
     const regex = new RegExp(`uniform\\s+(${uniformTypes.join('|')})\\s+${uniformName}[^\\w]`, 'g')
     return regex.test(shader)
 }
@@ -49,6 +49,8 @@ const createUniformDeclaration = (key, value) => {
     }
 
     if (typeof value === 'number') return `uniform float ${key};`
+
+    if (typeof value === 'boolean') return `uniform bool ${key};`
 
     if (value && typeof value === 'object') return `uniform sampler2D ${key};`
     return null
@@ -138,7 +140,7 @@ float random(vec2 st, float seed){
 }
 
 float random(vec2 st){
-    return random(st, time);
+    return random(st, iRandom);
 }
 
 float staticRandom(vec2 st){
@@ -203,11 +205,21 @@ vec3 rgb2hsl(vec3 c) {
 }
 
 
+vec4 hsl2rgb(vec4 hsl) { return vec4(hsl2rgb(hsl.xyz), hsl.w); }
+vec4 rgb2hsl(vec4 c) { return vec4(rgb2hsl(c.rgb), c.a); }
+
 vec3 getLast(vec2 uv){
     return rgb2hsl(texture(prevFrame, uv).rgb);
 }
 vec3 initial(vec2 uv){
     return rgb2hsl(texture(initialFrame, uv).rgb);
+}
+
+vec4 getLastFrameColor(vec2 uv){
+    return texture(prevFrame, uv);
+}
+vec4 getInitialFrameColor(vec2 uv){
+    return texture(initialFrame, uv);
 }
 
 vec2 centerUv(vec2 res, vec2 coord) {
@@ -223,6 +235,89 @@ vec3 hslmix(vec3 c1, vec3 c2, float t){
     vec3 hsl2 = rgb2hsl(c2);
     vec3 hsl = mix(hsl1, hsl2, t);
     return hsl2rgb(hsl);
+}
+
+vec4 hslmix(vec4 c1, vec4 c2, float t){
+    return vec4(hslmix(c1.rgb, c2.rgb, t), mix(c1.a, c2.a, t));
+}
+
+// Oklab color space conversions
+// Oklab is a perceptual color space - mixing in Oklab produces more natural gradients than HSL or RGB
+vec3 rgb2oklab(vec3 c) {
+    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    l = pow(l, 1.0/3.0); m = pow(m, 1.0/3.0); s = pow(s, 1.0/3.0);
+    return vec3(
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    );
+}
+
+vec3 oklab2rgb(vec3 lab) {
+    float l = lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z;
+    float m = lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z;
+    float s = lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z;
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    return vec3(
+         4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    );
+}
+
+vec4 rgb2oklab(vec4 c) { return vec4(rgb2oklab(c.rgb), c.a); }
+vec4 oklab2rgb(vec4 lab) { return vec4(oklab2rgb(lab.xyz), lab.w); }
+
+vec3 oklabmix(vec3 c1, vec3 c2, float t) {
+    return oklab2rgb(mix(rgb2oklab(c1), rgb2oklab(c2), t));
+}
+
+vec4 oklabmix(vec4 c1, vec4 c2, float t) {
+    return vec4(oklabmix(c1.rgb, c2.rgb, t), mix(c1.a, c2.a, t));
+}
+
+// Oklch color space - polar form of Oklab
+// vec3(L, C, h) where L=lightness(0-1), C=chroma(0-~0.37), h=hue angle(radians)
+vec3 oklab2oklch(vec3 lab) {
+    float C = length(lab.yz);
+    float h = atan(lab.z, lab.y);
+    return vec3(lab.x, C, h);
+}
+
+vec3 oklch2oklab(vec3 lch) {
+    return vec3(lch.x, lch.y * cos(lch.z), lch.y * sin(lch.z));
+}
+
+vec3 rgb2oklch(vec3 c) {
+    return oklab2oklch(rgb2oklab(c));
+}
+
+vec3 oklch2rgb(vec3 lch) {
+    return oklab2rgb(oklch2oklab(lch));
+}
+
+vec4 rgb2oklch(vec4 c) { return vec4(rgb2oklch(c.rgb), c.a); }
+vec4 oklch2rgb(vec4 lch) { return vec4(oklch2rgb(lch.xyz), lch.w); }
+
+vec3 oklchmix(vec3 c1, vec3 c2, float t) {
+    vec3 lch1 = rgb2oklch(c1);
+    vec3 lch2 = rgb2oklch(c2);
+    // Shortest-path hue interpolation
+    float dh = lch2.z - lch1.z;
+    if (dh > 3.14159265) dh -= 6.28318530;
+    if (dh < -3.14159265) dh += 6.28318530;
+    vec3 lch = vec3(
+        mix(lch1.x, lch2.x, t),
+        mix(lch1.y, lch2.y, t),
+        lch1.z + dh * t
+    );
+    return oklch2rgb(lch);
+}
+
+vec4 oklchmix(vec4 c1, vec4 c2, float t) {
+    return vec4(oklchmix(c1.rgb, c2.rgb, t), mix(c1.a, c2.a, t));
 }
 
 // Utility to make any value pingpong (go forward then backward)

@@ -170,6 +170,9 @@ export const make = async (deps) => { // Removed async as it's not used
         position: positions
     });
 
+    // Persistent random seeds
+    const seeds = [Math.random(), Math.random(), Math.random(), Math.random()]
+
     // State variables
     let frameNumber = 0
     let lastResolutionRatio = 1.0 // Start at 1.0
@@ -239,13 +242,21 @@ export const make = async (deps) => { // Removed async as it's not used
 
         // 3. Create dynamic context for uniforms
         const uniforms = {
-            initialFrame: initialTexture, // For getInitialFrameColor
-            prevFrame: prevFrameTexture,    // For getLastFrameColor
+            // Core uniforms
+            initialFrame: initialTexture,
+            prevFrame: prevFrameTexture,
             resolution: [frameBuffers[0].width, frameBuffers[0].height, 1],
             time,
             frame: frameNumber,
             touched: features.touched ?? false,
             touch: [features.touchX, features.touchY, features.touched ? 1: 0, 0],
+            // Random/seed uniforms
+            iRandom: Math.random(),
+            seed: seeds[0],
+            seed2: seeds[1],
+            seed3: seeds[2],
+            seed4: seeds[3],
+            // User features (override any defaults above)
             ...features
         };
         const wrappedUniforms = wrapFeatures(uniforms);
