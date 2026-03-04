@@ -7,6 +7,10 @@
     "test": "node run-tests.mjs",
     "start": "live-server --port=7355"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/redaphid/zuru-wish"
+  },
   "author": "hypnodroid <iam@hypnodroid.com>",
   "dependencies": {
     "twgl.js": "^5.5.4"
