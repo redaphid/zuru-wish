@@ -160,7 +160,7 @@ const isUniform = (value) => {
  * render()
  */
 export const make = async (deps) => { // Removed async as it's not used
-    const {canvas, initialImage, fragmentShader} = deps
+    const {canvas, initialImage, fragmentShader, autoResize = true} = deps
     const startTime = performance.now()
 
     const gl = getWebGLContext(canvas);
@@ -175,7 +175,6 @@ export const make = async (deps) => { // Removed async as it's not used
 
     // State variables
     let frameNumber = 0
-    let lastResolutionRatio = 1.0 // Start at 1.0
     let lastShader = fragmentShader
     let previousFeatures = {}
 
@@ -195,19 +194,23 @@ export const make = async (deps) => { // Removed async as it's not used
 
     let frameRenderTimes = []
     let lastFrameTime = 0
+    let lastResolutionRatio = 1.0
     const getRatio = (time) => {
-        frameRenderTimes.push(time - lastFrameTime)
+        const frameTime = (time - lastFrameTime) * 1000 // convert to ms
         lastFrameTime = time
-        if(frameRenderTimes.length < 20) return 1
-        if(frameRenderTimes.length > 20) frameRenderTimes.shift()
-        const averageFrameTime = frameRenderTimes.reduce((a, b) => a + b, 0) / frameRenderTimes.length
-        return Math.min( 1 /(averageFrameTime * 16), 1)
+        frameRenderTimes.push(frameTime)
+        if (frameRenderTimes.length > 20) frameRenderTimes.shift()
+        if (frameRenderTimes.length < 20) return lastResolutionRatio
+        const avg = frameRenderTimes.reduce((a, b) => a + b, 0) / frameRenderTimes.length
+        if (avg > 50) lastResolutionRatio = Math.max(0.5, lastResolutionRatio - 0.5)
+        else if (avg < 20 && lastResolutionRatio < 1) lastResolutionRatio = Math.min(1, lastResolutionRatio + 0.25)
+        return lastResolutionRatio
     }
     const resizeAll= (time) => {
+        if (!autoResize) return
         const ratio = getRatio(time)
         const resized = resizeCanvasToDisplaySize(gl.canvas, ratio)
-        // <<< RESTORE THIS >>> User requires FBOs to match canvas size for blit
-        if (resized) { // Only resize FBOs if canvas actually resized
+        if (resized) {
              frameBuffers.forEach(fb => resizeFramebufferInfo(gl, fb));
              gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         }
