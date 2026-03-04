@@ -29,6 +29,14 @@ const insertMain = shader => {
             fragColor.a = 1.0;
         }`
     }
+    if(shader.includes('mainImage')) {
+        return `#define iResolution resolution
+#define iTime time
+#define iFrame frame
+out vec4 fragColor;
+${shader}
+void main(void) { mainImage(fragColor, gl_FragCoord.xy); }`
+    }
 
     throw new Error(`No mainImage or main function found in shader`)
 }
@@ -106,7 +114,7 @@ const addErrorMarker = shader => {
 
     // Find the first main function as insertion point
     const mainIndex = lines.findIndex(line =>
-        line.includes('void main(') || line.includes('vec3 render('))
+        line.includes('void main(') || line.includes('vec3 render(') || line.includes('mainImage'))
 
     if (mainIndex === -1) {
         // Fallback: insert after directives (version/precision)

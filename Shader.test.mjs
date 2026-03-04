@@ -133,6 +133,64 @@ describe("Shader wrapping functionality", () => {
     });
   });
 
+  describe("when wrapping a mainImage shader", () => {
+    const shader = `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+              fragColor = vec4(0.0, 0.0, 1.0, 1.0);
+          }`;
+
+    it("should render correctly", () => {
+      render({ fragmentShader: shader });
+      const pixel = currentGetPixelColor(0, 0);
+      expect(pixel).to.deep.equal(new Uint8Array([0, 0, 255, 255]));
+    });
+
+    it("should include a main function in the wrapped string", () => {
+      const wrappedString = wrapShader(shader);
+      expect(wrappedString).to.include("void main(");
+    });
+
+    it("should include getLastFrameColor in the wrapped string", () => {
+      const wrappedString = wrapShader(shader);
+      expect(wrappedString).to.include("getLastFrameColor");
+    });
+
+    it("should include getInitialFrameColor in the wrapped string", () => {
+      const wrappedString = wrapShader(shader);
+      expect(wrappedString).to.include("getInitialFrameColor");
+    });
+
+    it("should include iResolution compatibility", () => {
+      const wrappedString = wrapShader(shader);
+      // mainImage shaders expect iResolution — it should be defined
+      expect(wrappedString).to.include("iResolution");
+    });
+  });
+
+  describe("when wrapping a mainImage shader that uses getLastFrameColor", () => {
+    const shader = `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+              vec2 uv = fragCoord / iResolution.xy;
+              vec4 prev = getLastFrameColor(uv);
+              fragColor = prev;
+          }`;
+
+    it("should render correctly", () => {
+      render({ fragmentShader: shader });
+      // Should compile and render without errors — on first frame prevFrame is (0,0,0,0)
+      const pixel = currentGetPixelColor(0, 0);
+      expect(pixel).to.be.an.instanceOf(Uint8Array);
+    });
+
+    it("should include getLastFrameColor definition before its use", () => {
+      const wrappedString = wrapShader(shader);
+      const defPos = wrappedString.indexOf("vec4 getLastFrameColor(vec2 uv)");
+      const usePos = wrappedString.indexOf("getLastFrameColor(uv)");
+      expect(defPos).to.be.greaterThan(-1, "getLastFrameColor should be defined");
+      expect(defPos).to.be.lessThan(usePos, "definition should come before use");
+    });
+  });
+
   describe("when wrapping a shader and checking built-in additions", () => {
     const shader = `
            vec3 render(vec2 uv, vec3 last) {

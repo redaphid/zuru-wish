@@ -283,6 +283,116 @@ describe("Wish", () => {
       });
     });
   });
+  describe("When a mainImage shader renders a solid color", () => {
+    beforeEach(() => {
+      render({
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            fragColor = vec4(0.0, 0.0, 1.0, 1.0);
+          }
+        `,
+      });
+    });
+    it("should render blue", () => {
+      const pixel = getPixelColor(canvas, 0, 0);
+      expect(pixel).to.deep.equal(new Uint8Array([0, 0, 255, 255]));
+    });
+  });
+  describe("When a mainImage shader uses iResolution and iTime", () => {
+    beforeEach(() => {
+      render({
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            vec2 uv = fragCoord / iResolution.xy;
+            fragColor = vec4(uv.x, uv.y, 0.0, 1.0);
+          }
+        `,
+      });
+    });
+    it("should render a gradient", () => {
+      const topRight = getPixelColor(canvas, canvas.width - 1, 0);
+      expect(topRight[0]).to.be.greaterThan(200); // high x = high red
+      expect(topRight[1]).to.be.greaterThan(200); // high y = high green (WebGL flipped)
+    });
+  });
+  describe("When a mainImage shader uses getLastFrameColor", () => {
+    beforeEach(async () => {
+      render = await make({
+        canvas,
+        initialImage: document.getElementById("initial-image"),
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            vec2 uv = fragCoord / iResolution.xy;
+            fragColor = getLastFrameColor(uv);
+          }
+        `,
+      });
+      render();
+    });
+    it("should render the initial image (red circle in center)", () => {
+      const center = getPixelColor(canvas, canvas.width / 2, canvas.height / 2);
+      expect(center[0]).to.be.greaterThan(200); // red
+      expect(center[1]).to.be.lessThan(50);
+      expect(center[2]).to.be.lessThan(50);
+    });
+  });
+  describe("When a mainImage shader uses getInitialFrameColor", () => {
+    beforeEach(async () => {
+      render = await make({
+        canvas,
+        initialImage: document.getElementById("initial-image"),
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            vec2 uv = fragCoord / iResolution.xy;
+            fragColor = getInitialFrameColor(uv);
+          }
+        `,
+      });
+      render();
+    });
+    it("should render the initial image", () => {
+      const center = getPixelColor(canvas, canvas.width / 2, canvas.height / 2);
+      expect(center[0]).to.be.greaterThan(200); // red circle
+    });
+  });
+  describe("When a mainImage shader uses rgb2hsl and hsl2rgb", () => {
+    beforeEach(() => {
+      render({
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            vec3 red = vec3(1.0, 0.0, 0.0);
+            vec3 hsl = rgb2hsl(red);
+            vec3 back = hsl2rgb(hsl);
+            fragColor = vec4(back, 1.0);
+          }
+        `,
+      });
+    });
+    it("should roundtrip red through HSL", () => {
+      const pixel = getPixelColor(canvas, 0, 0);
+      expect(pixel[0]).to.be.closeTo(255, 1);
+      expect(pixel[1]).to.equal(0);
+      expect(pixel[2]).to.equal(0);
+    });
+  });
+  describe("When a mainImage shader uses audio feature uniforms", () => {
+    beforeEach(() => {
+      render({
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            fragColor = vec4(energyNormalized, bassNormalized, 0.0, 1.0);
+          }
+        `,
+        energyNormalized: 1.0,
+        bassNormalized: 0.5,
+      });
+    });
+    it("should render using the audio uniform values", () => {
+      const pixel = getPixelColor(canvas, 0, 0);
+      expect(pixel[0]).to.be.closeTo(255, 1); // energyNormalized=1.0
+      expect(pixel[1]).to.be.closeTo(128, 1); // bassNormalized=0.5
+    });
+  });
   describe("when rendering has been normal for a while", () => {
     let originalWidth;
     let originalHeight;
