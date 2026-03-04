@@ -102,15 +102,15 @@ const createFramebuffers = (gl) => {
  */
 const getInitialFrame = async (gl, initialImage) => {
     if(!initialImage) return createTexture(gl, { width: 1, height: 1, min: gl.NEAREST, mag: gl.NEAREST, wrap: gl.REPEAT })
-    const options = {
-        width: initialImage?.width ?? 1,
-        height: initialImage?.height ?? 1,
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+    const texture = createTexture(gl, {
+        src: initialImage,
         min: gl.NEAREST,
         mag: gl.NEAREST,
         wrap: gl.REPEAT,
-        src: initialImage
-    }
-    return createTexture(gl, options)
+    })
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+    return texture
 }
 
 // Extracted helper to parse props for shader and features

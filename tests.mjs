@@ -393,6 +393,59 @@ describe("Wish", () => {
       expect(pixel[1]).to.be.closeTo(128, 1); // bassNormalized=0.5
     });
   });
+  describe("When a mainImage shader passes through an asymmetric initial image", () => {
+    // Create a test image: red top-left, green bottom-right
+    // This detects Y-flip and X-flip issues
+    let testImage;
+    beforeEach(async () => {
+      const imgCanvas = document.createElement("canvas");
+      imgCanvas.width = 64;
+      imgCanvas.height = 64;
+      const ctx = imgCanvas.getContext("2d");
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = "red";
+      ctx.fillRect(0, 0, 32, 32); // top-left = red
+      ctx.fillStyle = "lime";
+      ctx.fillRect(32, 32, 32, 32); // bottom-right = green
+
+      testImage = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = imgCanvas.toDataURL();
+      });
+
+      render = await make({
+        canvas,
+        initialImage: testImage,
+        fragmentShader: `
+          void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+            vec2 uv = fragCoord / iResolution.xy;
+            fragColor = getInitialFrameColor(uv);
+          }
+        `,
+      });
+      render();
+    });
+    it("should have red in the top-left", () => {
+      // Sample top-left quadrant center
+      const pixel = getPixelColor(canvas, canvas.width * 0.25, canvas.height * 0.25);
+      expect(pixel[0]).to.be.greaterThan(200, "red channel should be high");
+      expect(pixel[1]).to.be.lessThan(50, "green channel should be low");
+    });
+    it("should have green in the bottom-right", () => {
+      // Sample bottom-right quadrant center
+      const pixel = getPixelColor(canvas, canvas.width * 0.75, canvas.height * 0.75);
+      expect(pixel[1]).to.be.greaterThan(200, "green channel should be high");
+      expect(pixel[0]).to.be.lessThan(50, "red channel should be low");
+    });
+    it("should have black in the top-right", () => {
+      const pixel = getPixelColor(canvas, canvas.width * 0.75, canvas.height * 0.25);
+      expect(pixel[0]).to.be.lessThan(50);
+      expect(pixel[1]).to.be.lessThan(50);
+      expect(pixel[2]).to.be.lessThan(50);
+    });
+  });
   describe("when rendering has been normal for a while", () => {
     let originalWidth;
     let originalHeight;
